@@ -1,7 +1,7 @@
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from torchvision.datasets import MNIST, FashionMNIST, CIFAR10, CIFAR100
-from data_aug import *
+# from data_aug import *
 
 def mnist_data_loader(mnist_folder='./data/mnist_data', batch_size=64):
     transform = transforms.Compose([
