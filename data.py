@@ -27,8 +27,11 @@ def fashion_mnist_data_loader(folder='./data/fashion_mnist_data', batch_size=64)
 
 def cifar10_data_loader(folder='./data/cifar10_data', batch_size=64, transform=True):
     train_transform = transforms.Compose([
-        transforms.RandomHorizontalFlip(p=0.5),
+        # 
+        transforms.ColorJitter(brightness=0.24705882352941178), # 随机改变图像的亮度对比度和饱和度
         transforms.RandomRotation(degrees=5),
+        
+        transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomCrop((32, 32), padding=3),
         
         # # white/real/blind/hybrid noisy image denoising
@@ -56,7 +59,6 @@ def cifar10_data_loader(folder='./data/cifar10_data', batch_size=64, transform=T
         transforms.ToTensor(),
     ])
     train_set = CIFAR10(folder, train=True, download=True, transform=train_transform)
-    train_set = CIFAR10(folder, train=True, download=True, transform=transform)
     test_set = CIFAR10(folder, train=False, download=True, transform=transform)
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=True)
