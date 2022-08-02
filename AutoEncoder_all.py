@@ -30,6 +30,8 @@ parser.add_argument('--K', default=10, type=int, help='sparse dimension of featu
 # parser.add_argument('--data_name', default='fashion_mnist', type=str, help='dataset name to use')
 # parser.add_argument('--data_channel', default=1, type=int, help='channel of dataset')
 # parser.add_argument('--num_classes', default=10, type=int, help='class number for the dataset')
+# parser.add_argument('--latent_dim', default=20, type=int, help='latent dimension of prototype feature')
+# parser.add_argument('--K', default=10, type=int, help='sparse dimension of feature')
 
 # parser.add_argument('--data_name', default='cifar10', type=str, help='dataset name to use')
 # parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
@@ -67,6 +69,7 @@ def main(): # numclass=0
     if args.data_name=='mnist':
         train_loader, val_loader = mnist_data_loader(batch_size=args.batch_size)
         test_set = MNIST(root='./data/mnist_data', train=False, transform=transforms.ToTensor(), download=True)
+        image_shape = (1,1,28,28)
     elif args.data_name=='fashion_mnist':
         train_loader, val_loader = fashion_mnist_data_loader(batch_size=args.batch_size)
     elif args.data_name=='cifar10':
@@ -79,6 +82,7 @@ def main(): # numclass=0
             transforms.ToTensor(),
         ])
         test_set = CIFAR10(root='./data/cifar10_data', train=False, transform=CIFAR10_transform, download=True)
+        image_shape = (1,3,32,32)
     elif args.data_name=='cifar100':
         train_loader, val_loader = cifar100_data_loader(batch_size=args.batch_size)
 
@@ -182,7 +186,7 @@ def main(): # numclass=0
         c = i % N_COLS + 1  # % 是求余数，// 是求商+向下取整
         ax = plt.subplot(2 * N_ROWS, N_COLS, 2 * r * N_COLS + c)
 
-        x = view_data[i].reshape(1,3,32,32).to(device)
+        x = view_data[i].reshape(image_shape).to(device)
         feat, encoded, decoded = model(x)
         plt.imshow(feat.detach().cpu().squeeze().numpy().reshape(16,32))
 
