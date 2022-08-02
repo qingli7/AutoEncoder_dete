@@ -1,0 +1,5 @@
+/.vscode
+/data
+/runs
+/saved_models
+*.png

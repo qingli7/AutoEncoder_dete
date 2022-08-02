@@ -1,3 +1,11 @@
+'''
+Author: hushuwang hushuwang2019@ia.ac.cn
+Date: 2022-08-01 11:37:04
+LastEditors: hushuwang hushuwang2019@ia.ac.cn
+LastEditTime: 2022-08-02 11:37:12
+FilePath: /AutoEncoder_dete/model_all.py
+Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+'''
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,42 +15,33 @@ import torchvision
 class SparseAutoencoder_all(nn.Module):
     def __init__(self, in_channel, num_classes, feature_dim, latent_dim):
         super(SparseAutoencoder_all, self).__init__()
-
+        self.in_channel = in_channel
+        self.classes = num_classes
         cls = torchvision.models.resnet18(pretrained=True)
         cls.conv1 = nn.Conv2d(in_channels=in_channel, out_channels=64, kernel_size=3, stride=1, padding=3)
         self.cls = nn.Sequential(*list(cls.children())[:-1])
-
+        cnt = 0
+        for child in self.cls.children():
+            cnt += 1
+            if cnt>1:
+                for param in child.parameters():
+                    param.requires_grad = False
         # if in_channel == 1:
         #     recover_dim =  1*28*28
         # if in_channel==3:
         #     recover_dim =  3*32*32
-        recover_dim = feature_dim
+        # recover_dim = feature_dim
 
-        self.fc1_0 = nn.Linear(recover_dim, latent_dim)
-        self.fc2_0 = nn.Linear(latent_dim, recover_dim)
-        self.fc1_1 = nn.Linear(recover_dim, latent_dim)
-        self.fc2_1 = nn.Linear(latent_dim, recover_dim)
-        self.fc1_2 = nn.Linear(recover_dim, latent_dim)
-        self.fc2_2 = nn.Linear(latent_dim, recover_dim)
-        self.fc1_3 = nn.Linear(recover_dim, latent_dim)
-        self.fc2_3 = nn.Linear(latent_dim, recover_dim)
-        self.fc1_4 = nn.Linear(recover_dim, latent_dim)
-        self.fc2_4 = nn.Linear(latent_dim, recover_dim)
-        self.fc1_5 = nn.Linear(recover_dim, latent_dim)
-        self.fc2_5 = nn.Linear(latent_dim, recover_dim)
-        self.fc1_6 = nn.Linear(recover_dim, latent_dim)
-        self.fc2_6 = nn.Linear(latent_dim, recover_dim)
-        self.fc1_7 = nn.Linear(recover_dim, latent_dim)
-        self.fc2_7 = nn.Linear(latent_dim, recover_dim)
-        self.fc1_8 = nn.Linear(recover_dim, latent_dim)
-        self.fc2_8 = nn.Linear(latent_dim, recover_dim)
-        self.fc1_9 = nn.Linear(recover_dim, latent_dim)
-        self.fc2_9 = nn.Linear(latent_dim, recover_dim)
-        self.fc1 = nn.ModuleList([self.fc1_0, self.fc1_1, self.fc1_2, self.fc1_3, self.fc1_4, self.fc1_5, self.fc1_6, self.fc1_7, self.fc1_8, self.fc1_9])
-        self.fc2 = nn.ModuleList([self.fc2_0, self.fc2_1, self.fc2_2, self.fc2_3, self.fc2_4, self.fc2_5, self.fc2_6, self.fc2_7, self.fc2_8, self.fc2_9])
+        self.fc1 = nn.ModuleList([nn.Linear(feature_dim, latent_dim) for _ in range(num_classes)])
+        self.fc2 = nn.ModuleList([nn.Linear(latent_dim, feature_dim) for _ in range(num_classes)])
 
 
     def forward(self, x):
+        """
+            feat:(B,C)
+            encoded:(B,K,C)
+            decoded:(B,K,C)
+        """
         feat = self.cls(x).reshape(x.shape[0], -1)
 
         encoded = []
@@ -53,31 +52,7 @@ class SparseAutoencoder_all(nn.Module):
         encoded = torch.stack(encoded, dim=1)
         decoded = torch.stack(decoded, dim=1)
         # breakpoint()
-        
-        # encoded_0 = torch.sigmoid(self.fc1[0](feat))
-        # decoded_0 = torch.sigmoid(self.fc2[0](encoded_0))
-        # encoded_1 = torch.sigmoid(self.fc1[0](feat))
-        # decoded_1 = torch.sigmoid(self.fc2[0](encoded_1))
-        # encoded_2 = torch.sigmoid(self.fc1[0](feat))
-        # decoded_2 = torch.sigmoid(self.fc2[0](encoded_2))
-        # encoded_3 = torch.sigmoid(self.fc1[0](feat))
-        # decoded_3 = torch.sigmoid(self.fc2[0](encoded_3))
-        # encoded_4 = torch.sigmoid(self.fc1[0](feat))
-        # decoded_4 = torch.sigmoid(self.fc2[0](encoded_4))
-        # encoded_5 = torch.sigmoid(self.fc1[0](feat))
-        # decoded_5 = torch.sigmoid(self.fc2[0](encoded_5))
-        # encoded_6 = torch.sigmoid(self.fc1[0](feat))
-        # decoded_6 = torch.sigmoid(self.fc2[0](encoded_6))
-        # encoded_7 = torch.sigmoid(self.fc1[0](feat))
-        # decoded_7 = torch.sigmoid(self.fc2[0](encoded_7))
-        # encoded_8 = torch.sigmoid(self.fc1[0](feat))
-        # decoded_8 = torch.sigmoid(self.fc2[0](encoded_8))
-        # encoded_9 = torch.sigmoid(self.fc1[0](feat))
-        # decoded_9 = torch.sigmoid(self.fc2[0](encoded_9))
-        # encoded = [encoded_0, encoded_1, encoded_2, encoded_3, encoded_4, encoded_5, encoded_6, encoded_7, encoded_8, encoded_9]
-        # decoded = [decoded_0, decoded_1, decoded_2, decoded_3, decoded_4, decoded_5, decoded_6, decoded_7, decoded_8, decoded_9]
-        # breakpoint()
-        
+
         return feat, encoded, decoded
 
 

@@ -15,11 +15,13 @@ from torch.nn.parameter import Parameter
 from torch.autograd import Variable
 from torchvision.datasets import MNIST, FashionMNIST, CIFAR10, CIFAR100
 import torchvision.transforms as transforms
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 
 parser = argparse.ArgumentParser(description='Train Convolutionary Prototype Learning Models')
 
-parser.add_argument('--epochs', default=10, type=int, help='total number of epochs to run')
+parser.add_argument('--epochs', default=100, type=int, help='total number of epochs to run')
 
 parser.add_argument('--data_name', default='mnist', type=str, help='dataset name to use')
 parser.add_argument('--data_channel', default=1, type=int, help='channel of dataset')
@@ -46,13 +48,13 @@ parser.add_argument('--feature_dim', default=512, type=int, help='feature dimens
 # parser.add_argument('--K', default=100, type=int, help='sparse dimension of feature')
 parser.add_argument('--batch_size', default=64, type=int, help='train batch size')
 parser.add_argument('--temp', default=0.1, type=float, help='trianing time temperature')
-parser.add_argument('--learning_rate', type=float, default=0.1, help='initial learning rate')
+parser.add_argument('--learning_rate', type=float, default=0.01, help='initial learning rate')
 parser.add_argument('--cls_weight', type=float, default=0.01, help='ce learning weight')
 parser.add_argument('--pl_weight', type=float, default=1e-3, help='pl learning weight')
 parser.add_argument('--kl_weight', type=float, default=0.1, help='kl divergence weight') # kl_weight
 parser.add_argument('--mse_weight', type=float, default=0.01, help='mse learning weight')
-parser.add_argument('--use_sparse', type=Boolean, default=True, help='sparse autoencoder')
-# parser.add_argument('--use_sparse', type=Boolean, default=False, help='sparse autoencoder')
+# parser.add_argument('--use_sparse', type=Boolean, default=True, help='sparse autoencoder')
+parser.add_argument('--use_sparse', type=Boolean, default=False, help='sparse autoencoder')
 
 
 
@@ -69,8 +71,8 @@ def main(): # numclass=0
     # train_loader, val_loader = cifar100_data_loader(batch_size=args.batch_size)
 
     test_set = MNIST(root='./data/mnist_data', train=False, transform=transforms.ToTensor(), download=True)
-
-
+    run_dir = "./runs/"
+    writer = SummaryWriter(run_dir, flush_secs=10)
     model = SparseAutoencoder_all(in_channel=args.data_channel,num_classes=args.num_classes,feature_dim=args.feature_dim, latent_dim=args.latent_dim).to(device) #
     # model = SparseAutoencoder_all(in_channel=args.data_channel, num_classes=args.num_classes, feature_dim=args.feature_dim, latent_dim=args.latent_dim).to(device) #
     optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.learning_rate, momentum=0.9, weight_decay=1e-4)   #
@@ -80,12 +82,12 @@ def main(): # numclass=0
     rho = torch.FloatTensor([0.005 for _ in range(args.K)]).unsqueeze(0).to(device) # args.latent_dim
     # rho = torch.FloatTensor([0.005 for _ in range(args.latent_dim)]).unsqueeze(0).to(device) # args.latent_dim
 
-    cls = CLoss()
+    cls_ = CLoss()
     sls = SparseLoss()
     mse = MSELoss()
     temp_acc = 0.8
     # mse = torch.nn.MSELoss()
-    for epoch in range(args.epochs):
+    for epoch in tqdm(range(args.epochs)):
         train_loss, train_correct, train_total = 0, 0, 0
         val_loss, val_correct, val_total = 0, 0, 0
 
@@ -95,15 +97,16 @@ def main(): # numclass=0
             inputs = inputs.float().to(device) # [64, 3, 32, 32]
             targets = targets.long().to(device)
             feat, encoded, decoded = model(inputs)
-            encoded = torch.tensor([item.cpu().detach().numpy() for item in encoded]).cuda()
-            decoded = torch.tensor([item.cpu().detach().numpy() for item in decoded]).cuda()
+            # encoded = torch.tensor([item.cpu().detach().numpy() for item in encoded]).cuda()
+            # decoded = torch.tensor([item.cpu().detach().numpy() for item in decoded]).cuda()
             # [64, 512] [10, 64, 512] [10, 64, 10] [10, 64, 784]
 
-            MSE_loss = mse(feat,decoded,targets)
-            C_loss = args.cls_weight * cls(feat, decoded, targets)
-            Sparse_loss = args.kl_weight * sls(rho, encoded, targets, args.K)
+            MSE_loss = mse(feat, decoded, targets)
+            C_loss = args.cls_weight * cls_(feat, decoded, targets)
+            # Sparse_loss = args.kl_weight * sls(rho, encoded, targets, args.K)
 
-            loss = MSE_loss + C_loss + Sparse_loss
+            # loss = MSE_loss + C_loss + Sparse_loss
+            loss = MSE_loss + C_loss
             # print(MSE_loss, C_loss, Sparse_loss)
 
 
@@ -131,11 +134,12 @@ def main(): # numclass=0
                 feat, encoded, decoded = model(inputs)
 
                 MSE_loss = mse(feat,decoded,targets)
-                C_loss = args.cls_weight * cls(feat, decoded, targets)
-                Sparse_loss = args.kl_weight * sls(rho, encoded, targets, args.K)
+                C_loss = args.cls_weight * cls_(feat, decoded, targets)
+                # Sparse_loss = args.kl_weight * sls(rho, encoded, targets, args.K)
 
-                loss = MSE_loss + C_loss + Sparse_loss
-                
+                # loss = MSE_loss + C_loss + Sparse_loss
+                loss = MSE_loss + C_loss
+
                 _, predicts = torch.min(L2_dist(feat, decoded), dim=1)
                 val_loss = val_loss + loss.item()
                 val_total += len(targets)
@@ -150,11 +154,15 @@ def main(): # numclass=0
             torch.save(model.state_dict(), 'saved_models/%s/scpn_%s_ld_%d_ep_%d_va_%.4f.pth'
                        % (args.data_name, args.data_name, args.latent_dim, epoch, val_acc))
 
-        print(
-            'Epoch : %03d  Train Loss: %.3f | Train Acc: %.3f%% | Val Loss: %.3f | Val Acc: %.3f%%'
-            % (epoch, train_loss, 100 * train_acc, val_loss, 100 * val_acc))
-            # 'Epoch : %03d  Train Loss: %.3f | Val Loss: %.3f ' % (epoch, train_loss,  val_loss))
-
+        writer.add_scalar("train/loss", train_loss, global_step=epoch)
+        writer.add_scalar("train/acc", train_acc, global_step=epoch)
+        writer.add_scalar("val/loss", val_loss, global_step=epoch)
+        writer.add_scalar("val/acc", val_acc, global_step=epoch)
+        # print(
+        #     'Epoch : %03d  Train Loss: %.3f | Train Acc: %.3f%% | Val Loss: %.3f | Val Acc: %.3f%%'
+        #     % (epoch, train_loss, 100 * train_acc, val_loss, 100 * val_acc))
+        #     # 'Epoch : %03d  Train Loss: %.3f | Val Loss: %.3f ' % (epoch, train_loss,  val_loss))
+    writer.close()
 
     N_ROWS = 4
     N_COLS = 8
@@ -180,7 +188,7 @@ def main(): # numclass=0
         # reconstructed image
         ax = plt.subplot(2 * N_ROWS, N_COLS, 2 * r * N_COLS + c + N_COLS)
         # plt.imshow(decoded.detach().cpu().squeeze().numpy().reshape(16,16))
-        plt.imshow(decoded[view_target[i]].detach().cpu().squeeze().numpy().reshape(16,32))
+        plt.imshow(decoded[:,view_target[i],:].detach().cpu().squeeze().numpy().reshape(16,32))
         plt.gray()
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
