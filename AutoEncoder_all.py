@@ -53,7 +53,7 @@ parser.add_argument('--temp', default=0.1, type=float, help='trianing time tempe
 parser.add_argument('--learning_rate', type=float, default=0.1, help='initial learning rate')
 parser.add_argument('--cls_weight', type=float, default=0.01, help='ce learning weight')
 parser.add_argument('--pl_weight', type=float, default=1e-3, help='pl learning weight')
-parser.add_argument('--kl_weight', type=float, default=0.1, help='kl divergence weight') # kl_weight
+parser.add_argument('--kl_weight', type=float, default=0.1, help='kl divergence weight')
 parser.add_argument('--mse_weight', type=float, default=0.01, help='mse learning weight')
 # parser.add_argument('--use_sparse', type=Boolean, default=True, help='sparse autoencoder')
 parser.add_argument('--use_sparse', type=Boolean, default=False, help='sparse autoencoder')
