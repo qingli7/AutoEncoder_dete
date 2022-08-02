@@ -19,7 +19,7 @@ import torchvision.transforms as transforms
 
 parser = argparse.ArgumentParser(description='Train Convolutionary Prototype Learning Models')
 
-parser.add_argument('--epochs', default=10, type=int, help='total number of epochs to run')
+parser.add_argument('--epochs', default=300, type=int, help='total number of epochs to run')
 
 parser.add_argument('--data_name', default='mnist', type=str, help='dataset name to use')
 parser.add_argument('--data_channel', default=1, type=int, help='channel of dataset')
@@ -40,6 +40,8 @@ parser.add_argument('--K', default=10, type=int, help='sparse dimension of featu
 # parser.add_argument('--data_name', default='cifar100', type=str, help='dataset name to use')
 # parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
 # parser.add_argument('--num_classes', default=100, type=int, help='class number for the dataset')
+# parser.add_argument('--latent_dim', default=100, type=int, help='latent dimension of prototype feature')
+# parser.add_argument('--K', default=50, type=int, help='sparse dimension of feature')
 
 parser.add_argument('--feature_dim', default=512, type=int, help='feature dimension of original data')
 # parser.add_argument('--latent_dim', default=100, type=int, help='latent dimension of prototype feature')
@@ -51,8 +53,8 @@ parser.add_argument('--cls_weight', type=float, default=0.01, help='ce learning 
 parser.add_argument('--pl_weight', type=float, default=1e-3, help='pl learning weight')
 parser.add_argument('--kl_weight', type=float, default=0.1, help='kl divergence weight') # kl_weight
 parser.add_argument('--mse_weight', type=float, default=0.01, help='mse learning weight')
-parser.add_argument('--use_sparse', type=Boolean, default=True, help='sparse autoencoder')
-# parser.add_argument('--use_sparse', type=Boolean, default=False, help='sparse autoencoder')
+# parser.add_argument('--use_sparse', type=Boolean, default=True, help='sparse autoencoder')
+parser.add_argument('--use_sparse', type=Boolean, default=False, help='sparse autoencoder')
 
 
 
@@ -62,21 +64,30 @@ device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 def main(): # numclass=0
     print(args)
-    # print('numclass:',numclass)
-    train_loader, val_loader = mnist_data_loader(batch_size=args.batch_size)
-    # train_loader, val_loader = fashion_mnist_data_loader(batch_size=args.batch_size)
-    # train_loader, val_loader = cifar10_data_loader(batch_size=args.batch_size)
-    # train_loader, val_loader = cifar100_data_loader(batch_size=args.batch_size)
-
-    test_set = MNIST(root='./data/mnist_data', train=False, transform=transforms.ToTensor(), download=True)
+    if args.data_name=='mnist':
+        train_loader, val_loader = mnist_data_loader(batch_size=args.batch_size)
+        test_set = MNIST(root='./data/mnist_data', train=False, transform=transforms.ToTensor(), download=True)
+    elif args.data_name=='fashion_mnist':
+        train_loader, val_loader = fashion_mnist_data_loader(batch_size=args.batch_size)
+    elif args.data_name=='cifar10':
+        train_loader, val_loader = cifar10_data_loader(batch_size=args.batch_size)
+        CIFAR10_transform = transforms.Compose([
+            transforms.ColorJitter(brightness=0.24705882352941178), 
+            transforms.RandomRotation(degrees=5),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomCrop((32, 32), padding=3),       
+            transforms.ToTensor(),
+        ])
+        test_set = CIFAR10(root='./data/cifar10_data', train=False, transform=CIFAR10_transform, download=True)
+    elif args.data_name=='cifar100':
+        train_loader, val_loader = cifar100_data_loader(batch_size=args.batch_size)
 
 
     model = SparseAutoencoder_all(in_channel=args.data_channel,num_classes=args.num_classes,feature_dim=args.feature_dim, latent_dim=args.latent_dim).to(device) #
-    # model = SparseAutoencoder_all(in_channel=args.data_channel, num_classes=args.num_classes, feature_dim=args.feature_dim, latent_dim=args.latent_dim).to(device) #
     optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.learning_rate, momentum=0.9, weight_decay=1e-4)   #
     # optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.learning_rate, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[50, 100, 150], gamma=0.1)
-    # 150, 210, 270
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150, 210, 270], gamma=0.1)
+    # 150, 210, 270      50, 100, 150
     rho = torch.FloatTensor([0.005 for _ in range(args.K)]).unsqueeze(0).to(device) # args.latent_dim
     # rho = torch.FloatTensor([0.005 for _ in range(args.latent_dim)]).unsqueeze(0).to(device) # args.latent_dim
 
@@ -100,12 +111,13 @@ def main(): # numclass=0
             # [64, 512] [10, 64, 512] [10, 64, 10] [10, 64, 784]
 
             MSE_loss = mse(feat,decoded,targets)
-            C_loss = args.cls_weight * cls(feat, decoded, targets)
-            Sparse_loss = args.kl_weight * sls(rho, encoded, targets, args.K)
-
-            loss = MSE_loss + C_loss + Sparse_loss
+            C_loss = args.cls_weight * cls(feat, decoded, targets, args.temp)
+            if args.use_sparse:
+                Sparse_loss = args.kl_weight * sls(rho, encoded, targets, args.K)
+                loss = MSE_loss + C_loss + Sparse_loss
+            else: 
+                loss = MSE_loss + C_loss
             # print(MSE_loss, C_loss, Sparse_loss)
-
 
             optimizer.zero_grad()
             loss.backward()
@@ -131,10 +143,12 @@ def main(): # numclass=0
                 feat, encoded, decoded = model(inputs)
 
                 MSE_loss = mse(feat,decoded,targets)
-                C_loss = args.cls_weight * cls(feat, decoded, targets)
-                Sparse_loss = args.kl_weight * sls(rho, encoded, targets, args.K)
-
-                loss = MSE_loss + C_loss + Sparse_loss
+                C_loss = args.cls_weight * cls(feat, decoded, targets, args.temp)
+                if args.use_sparse:
+                    Sparse_loss = args.kl_weight * sls(rho, encoded, targets, args.K)
+                    loss = MSE_loss + C_loss + Sparse_loss
+                else: 
+                    loss = MSE_loss + C_loss
                 
                 _, predicts = torch.min(L2_dist(feat, decoded), dim=1)
                 val_loss = val_loss + loss.item()
@@ -168,7 +182,7 @@ def main(): # numclass=0
         c = i % N_COLS + 1  # % 是求余数，// 是求商+向下取整
         ax = plt.subplot(2 * N_ROWS, N_COLS, 2 * r * N_COLS + c)
 
-        x = view_data[i].reshape(1,1,28,28).to(device)
+        x = view_data[i].reshape(1,3,32,32).to(device)
         feat, encoded, decoded = model(x)
         plt.imshow(feat.detach().cpu().squeeze().numpy().reshape(16,32))
 
@@ -179,8 +193,7 @@ def main(): # numclass=0
 
         # reconstructed image
         ax = plt.subplot(2 * N_ROWS, N_COLS, 2 * r * N_COLS + c + N_COLS)
-        # plt.imshow(decoded.detach().cpu().squeeze().numpy().reshape(16,16))
-        plt.imshow(decoded[view_target[i]].detach().cpu().squeeze().numpy().reshape(16,32))
+        plt.imshow(decoded[:,view_target[i],:].detach().cpu().squeeze().numpy().reshape(16,32))
         plt.gray()
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
