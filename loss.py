@@ -54,9 +54,8 @@ class MSELoss(nn.Module):
 
 
 class CLoss(nn.Module):
-    def __init__(self, t=1):
+    def __init__(self):
         super(CLoss, self).__init__()
-        self.t = t
         self.loss = nn.CrossEntropyLoss()
 
     def L2_dist(self, x, y):
@@ -66,10 +65,10 @@ class CLoss(nn.Module):
         dist = torch.sqrt(torch.sum(torch.square(x[:, None, :] - y), dim=-1))  # square 按元素求平方
         return dist
 
-    def forward(self, feat, feat2, labels):
+    def forward(self, feat, feat2, labels, temp):
         # feat2 = feat2.reshape(len(feat),10,-1)
-        logits = -self.L2_dist(feat, feat2) / self.t
-        # print(logits,feat2.shape, feat.shape)
+        logits = -self.L2_dist(feat, feat2) / temp
+        # print(logits)
         loss = self.loss(logits, labels)
         return loss
 
