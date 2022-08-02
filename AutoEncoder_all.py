@@ -93,7 +93,6 @@ def main(): # numclass=0
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150, 210, 270], gamma=0.1)
     # 150, 210, 270      50, 100, 150
     rho = torch.FloatTensor([0.005 for _ in range(args.K)]).unsqueeze(0).to(device) # args.latent_dim
-    # rho = torch.FloatTensor([0.005 for _ in range(args.latent_dim)]).unsqueeze(0).to(device) # args.latent_dim
 
     cls = CLoss()
     sls = SparseLoss()
