@@ -3,7 +3,6 @@ from pandas import DataFrame
 import torch
 import argparse
 import shutil
-from model_all import *
 from loss import *
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
@@ -15,6 +14,8 @@ from torch.nn.parameter import Parameter
 from torch.autograd import Variable
 from torchvision.datasets import MNIST, FashionMNIST, CIFAR10, CIFAR100
 import torchvision.transforms as transforms
+from model_all import SparseAutoencoder_all
+
 
 
 parser = argparse.ArgumentParser(description='Train Convolutionary Prototype Learning Models')
@@ -46,19 +47,19 @@ parser.add_argument('--K', default=10, type=int, help='sparse dimension of featu
 # parser.add_argument('--K', default=50, type=int, help='sparse dimension of feature')
 
 parser.add_argument('--feature_dim', default=512, type=int, help='feature dimension of original data')
-# parser.add_argument('--latent_dim', default=100, type=int, help='latent dimension of prototype feature')
-# parser.add_argument('--K', default=100, type=int, help='sparse dimension of feature')
+# parser.add_argument('--latent_dim', default=10, type=int, help='latent dimension of prototype feature')
+# parser.add_argument('--K', default=5, type=int, help='sparse dimension of feature')
 parser.add_argument('--batch_size', default=64, type=int, help='train batch size')
 parser.add_argument('--temp', default=0.1, type=float, help='trianing time temperature')
-parser.add_argument('--learning_rate', type=float, default=0.1, help='initial learning rate')
-parser.add_argument('--cls_weight', type=float, default=0.01, help='ce learning weight')
+parser.add_argument('--cls_weight', type=float, default=1e-1, help='ce learning weight')
 parser.add_argument('--pl_weight', type=float, default=1e-3, help='pl learning weight')
-parser.add_argument('--kl_weight', type=float, default=0.1, help='kl divergence weight')
-parser.add_argument('--mse_weight', type=float, default=0.01, help='mse learning weight')
-# parser.add_argument('--use_sparse', type=Boolean, default=True, help='sparse autoencoder')
-parser.add_argument('--use_sparse', type=Boolean, default=False, help='sparse autoencoder')
+parser.add_argument('--kl_weight', type=float, default=1e-1, help='kl divergence weight') # kl_weight
+parser.add_argument('--mse_weight', type=float, default=1e-2, help='mse learning weight')
+parser.add_argument('--use_sparse', type=Boolean, default=True, help='sparse autoencoder')
+# parser.add_argument('--use_sparse', type=Boolean, default=False, help='sparse autoencoder')
 
-
+parser.add_argument('--lr', type=float, default=1e-1, help='initial learning rate')
+parser.add_argument('--weight_decay', type=float, default=1e-8, help='weight decay')
 
 args = parser.parse_args()
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -88,10 +89,10 @@ def main(): # numclass=0
 
 
     model = SparseAutoencoder_all(in_channel=args.data_channel,num_classes=args.num_classes,feature_dim=args.feature_dim, latent_dim=args.latent_dim).to(device) #
-    optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.learning_rate, momentum=0.9, weight_decay=1e-4)   #
-    # optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.learning_rate, weight_decay=1e-4)
+    optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)   #
+    # optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150, 210, 270], gamma=0.1)
-    # 150, 210, 270      50, 100, 150
+    # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100, 200, 300, 400], gamma=0.5)
     rho = torch.FloatTensor([0.005 for _ in range(args.K)]).unsqueeze(0).to(device) # args.latent_dim
 
     cls = CLoss()
@@ -100,8 +101,8 @@ def main(): # numclass=0
     temp_acc = 0.8
     # mse = torch.nn.MSELoss()
     for epoch in range(args.epochs):
-        train_loss, train_correct, train_total = 0, 0, 0
-        val_loss, val_correct, val_total = 0, 0, 0
+        train_mse_loss, train_loss, train_correct, train_total = 0, 0, 0, 0
+        val_mse_loss, val_loss, val_correct, val_total = 0, 0, 0, 0
 
         model.train()
         # for inputs, targets in tqdm(train_loader):
@@ -109,18 +110,17 @@ def main(): # numclass=0
             inputs = inputs.float().to(device) # [64, 3, 32, 32]
             targets = targets.long().to(device)
             feat, encoded, decoded = model(inputs)
-            encoded = torch.tensor([item.cpu().detach().numpy() for item in encoded]).cuda()
-            decoded = torch.tensor([item.cpu().detach().numpy() for item in decoded]).cuda()
-            # [64, 512] [10, 64, 512] [10, 64, 10] [10, 64, 784]
 
-            MSE_loss = mse(feat,decoded,targets)
+            MSE_loss = args.mse_weight * mse(feat,decoded,targets)
             C_loss = args.cls_weight * cls(feat, decoded, targets, args.temp)
             if args.use_sparse:
                 Sparse_loss = args.kl_weight * sls(rho, encoded, targets, args.K)
-                loss = MSE_loss + C_loss + Sparse_loss
+                loss = C_loss + Sparse_loss
             else: 
-                loss = MSE_loss + C_loss
+                loss = C_loss
             # print(MSE_loss, C_loss, Sparse_loss)
+            
+            # loss = C_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -131,9 +131,11 @@ def main(): # numclass=0
             train_loss += loss.item()
             train_total += len(targets)
             train_correct += predicts.to(device).eq(targets).sum().item()
+            train_mse_loss += MSE_loss.item()
 
         train_loss = train_loss / len(train_loader)  # / 938 = 60032 / 64
         train_acc =  train_correct / train_total  # / 60,000
+        train_mse_loss = train_mse_loss / len(train_loader)  # / 938 = 60032 / 64
 
         scheduler.step()
 
@@ -145,21 +147,25 @@ def main(): # numclass=0
                 targets = targets.long().to(device)
                 feat, encoded, decoded = model(inputs)
 
-                MSE_loss = mse(feat,decoded,targets)
+                MSE_loss = args.mse_weight * mse(feat,decoded,targets)
                 C_loss = args.cls_weight * cls(feat, decoded, targets, args.temp)
                 if args.use_sparse:
                     Sparse_loss = args.kl_weight * sls(rho, encoded, targets, args.K)
-                    loss = MSE_loss + C_loss + Sparse_loss
+                    loss = C_loss + Sparse_loss
                 else: 
-                    loss = MSE_loss + C_loss
+                    loss = C_loss
+                    
+                # loss = C_loss
                 
                 _, predicts = torch.min(L2_dist(feat, decoded), dim=1)
                 val_loss = val_loss + loss.item()
                 val_total += len(targets)
                 val_correct += predicts.to(device).eq(targets).sum().item()
+                val_mse_loss += MSE_loss.item()
 
             val_loss = val_loss / len(val_loader)
             val_acc = val_correct / val_total
+            val_mse_loss = val_mse_loss / len(val_loader)  # / 938 = 60032 / 64
 
         if (epoch % 10 == 0) or (val_acc >= temp_acc): # (val_acc >= temp_acc): val_loss < temp_loss)
             # temp_loss = val_loss
@@ -170,8 +176,15 @@ def main(): # numclass=0
         print(
             'Epoch : %03d  Train Loss: %.3f | Train Acc: %.3f%% | Val Loss: %.3f | Val Acc: %.3f%%'
             % (epoch, train_loss, 100 * train_acc, val_loss, 100 * val_acc))
-            # 'Epoch : %03d  Train Loss: %.3f | Val Loss: %.3f ' % (epoch, train_loss,  val_loss))
 
+
+        # record training logs
+        writer.add_scalar('train/loss', train_loss, epoch)
+        writer.add_scalar('train/acc', train_acc, epoch)
+        writer.add_scalar('val/loss', val_loss, epoch)
+        writer.add_scalar("train/mse_loss", train_mse_loss, epoch)
+        writer.add_scalar('val/acc', val_acc, epoch)
+        writer.add_scalar("val/mse_loss", val_mse_loss, epoch)
 
     N_ROWS = 4
     N_COLS = 8
@@ -205,5 +218,10 @@ def main(): # numclass=0
 
 
 if __name__ == '__main__':
+    
+    # remove old log file
+    logdir = './tensorboard/GCPL/'
+    shutil.rmtree(logdir, True)
+    writer = SummaryWriter(logdir)
 
     main()
