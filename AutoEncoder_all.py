@@ -59,7 +59,7 @@ parser.add_argument('--use_sparse', type=Boolean, default=True, help='sparse aut
 # parser.add_argument('--use_sparse', type=Boolean, default=False, help='sparse autoencoder')
 
 parser.add_argument('--lr', type=float, default=1e-1, help='initial learning rate')
-parser.add_argument('--weight_decay', type=float, default=1e-8, help='weight decay')
+parser.add_argument('--weight_decay', type=float, default=1e-10, help='weight decay')
 
 args = parser.parse_args()
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -91,8 +91,7 @@ def main(): # numclass=0
     model = SparseAutoencoder_all(in_channel=args.data_channel,num_classes=args.num_classes,feature_dim=args.feature_dim, latent_dim=args.latent_dim).to(device) #
     optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)   #
     # optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150, 210, 270], gamma=0.1)
-    # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100, 200, 300, 400], gamma=0.5)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[50, 100, 150], gamma=0.5)
     rho = torch.FloatTensor([0.005 for _ in range(args.K)]).unsqueeze(0).to(device) # args.latent_dim
 
     cls = CLoss()
