@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from sklearn import metrics
 from scipy import interpolate
 from model_all import SparseAutoencoder_all
-from data import mnist_data_loader, fashion_mnist_data_loader, cifar10_data_loader, cifar100_data_loader
+from data import mnist_data_loader, fashion_mnist_data_loader, cifar10_data_loader, cifar100_data_loader, svhn_data_loader
 from torchvision.datasets import MNIST, FashionMNIST, CIFAR10, CIFAR100
 import torchvision.transforms as transforms
 
@@ -25,11 +25,14 @@ cifar_train_transform = transforms.Compose([
 # train_loader, val_loader = mnist_data_loader()
 # ood_train_loader, ood_val_loader = fashion_mnist_data_loader()
 
-pretrain = 'result_models/scpn_cifar10_ld_50_ep_259_l1_1_s_0_0.9327.pth'
-model = SparseAutoencoder_all(in_channel=3,num_classes=10,feature_dim=512, latent_dim=50).to(device) #
+pretrain = 'result_models/scpn_cifar10_ld_20_ep_285_l1_1_s_0_0.9494.pth'
+model = SparseAutoencoder_all(in_channel=3,num_classes=10,feature_dim=512, latent_dim=20).to(device) #
 test_data = CIFAR10(root='./data/cifar10_data', train=False, transform=cifar_train_transform, download=True)
 train_loader, val_loader = cifar10_data_loader()
+# ood_train_loader, ood_val_loader = svhn_data_loader()
 ood_train_loader, ood_val_loader = cifar100_data_loader()
+
+classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
 model.load_state_dict(torch.load(pretrain, map_location='cpu'))
 model.eval()
@@ -49,9 +52,8 @@ def main():
     # OOD Detection
     out_score = get_ood_scores(ood_val_loader)
     print('\nin_score and out_score')
-    print(in_score[:3], out_score[:3])
+    print(in_score[:10], out_score[:10])
     measures = get_measures(in_score, out_score)
-    # measures = get_measures(out_score, in_score)
     aurocs.append(measures[0]); auprs.append(measures[1]); fprs.append(measures[2])
     auroc = np.mean(aurocs); aupr = np.mean(auprs); fpr = np.mean(fprs)
     print_measures(auroc, aupr, fpr)
@@ -74,11 +76,11 @@ def get_ood_scores(loader, in_dist=False):
             data = data.cuda()
             feat, encoded, decoded = model(data)
             
-            logits = -0.1 * torch.sum(torch.abs(feat[:, None, :] - decoded), dim=-1) # L1
-            # logits = -0.1 * torch.sqrt(torch.sum(torch.square(feat[:, None, :] - decoded), dim=-1)) # L2
+            logits = -1e-3* torch.sum(torch.abs(feat[:, None, :] - decoded), dim=-1) # L1
+            # logits = -1e-1 * torch.sqrt(torch.sum(torch.square(feat[:, None, :] - decoded), dim=-1)) # L2
             smax = to_np(F.softmax(logits, dim=1))
             
-            _score.append(np.max(smax, axis=1))
+            _score.append(np.max(smax, axis=1)) # 1e-4/90
             # _score.append(np.min(to_np(-logits), axis=1))
             
             if in_dist:
@@ -111,9 +113,9 @@ def get_measures(_pos, _neg, recall_level=0.95):
 
     auroc = metrics.roc_auc_score(labels, scores)
     aupr = metrics.average_precision_score(labels, scores)
-    # fpr = ErrorRateAt95Recall1(labels, scores, recall_level)
-    fpr, tpr, thresh = metrics.roc_curve(labels, scores)
-    fpr = float(interpolate.interp1d(tpr, fpr)(0.95)) #所有正类中被预测为正类TPR=0.95时，所有反类中被预测为正类FPR的值
+    fpr = ErrorRateAt95Recall1(labels, scores, recall_level)
+    # fpr, tpr, thresh = metrics.roc_curve(labels, scores)
+    # fpr = float(interpolate.interp1d(tpr, fpr)(0.95)) #所有正类中被预测为正类TPR=0.95时，所有反类中被预测为正类FPR的值
 
     return auroc, aupr, fpr
 
