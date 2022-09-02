@@ -1,32 +1,22 @@
-from xmlrpc.client import Boolean
-from pandas import DataFrame
 import torch
 import argparse
 import shutil
-from loss import *
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
-from data import mnist_data_loader, fashion_mnist_data_loader, cifar10_data_loader, cifar100_data_loader
-from torch import nn
+from xmlrpc.client import Boolean
 import matplotlib.pyplot as plt
-import numpy as np
-from torch.nn.parameter import Parameter
-from torch.autograd import Variable
-from torchvision.datasets import MNIST, FashionMNIST, CIFAR10, CIFAR100
-import torchvision.transforms as transforms
+from loss import *
 from model_all import SparseAutoencoder_all
-
-
+import torchvision.transforms as transforms
+from torchvision.datasets import MNIST, FashionMNIST, CIFAR10, CIFAR100
+from data import mnist_data_loader, fashion_mnist_data_loader, cifar10_data_loader, cifar100_data_loader
 
 parser = argparse.ArgumentParser(description='Train Convolutionary Prototype Learning Models')
 
-parser.add_argument('--epochs', default=300, type=int, help='total number of epochs to run')
-
+# dataset
 # parser.add_argument('--data_name', default='mnist', type=str, help='dataset name to use')
 # parser.add_argument('--data_channel', default=1, type=int, help='channel of dataset')
 # parser.add_argument('--num_classes', default=10, type=int, help='class number for the dataset')
-# parser.add_argument('--latent_dim', default=20, type=int, help='latent dimension of prototype feature')
-# parser.add_argument('--K', default=10, type=int, help='sparse dimension of feature')
 
 # parser.add_argument('--data_name', default='fashion_mnist', type=str, help='dataset name to use')
 # parser.add_argument('--data_channel', default=1, type=int, help='channel of dataset')
@@ -35,31 +25,40 @@ parser.add_argument('--epochs', default=300, type=int, help='total number of epo
 parser.add_argument('--data_name', default='cifar10', type=str, help='dataset name to use')
 parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
 parser.add_argument('--num_classes', default=10, type=int, help='class number for the dataset')
-parser.add_argument('--latent_dim', default=20, type=int, help='latent dimension of autoencoder feature')
-parser.add_argument('--K', default=10, type=int, help='sparse dimension of feature')
 
 # parser.add_argument('--data_name', default='cifar100', type=str, help='dataset name to use')c
 # parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
 # parser.add_argument('--num_classes', default=100, type=int, help='class number for the dataset')
 
 parser.add_argument('--feature_dim', default=512, type=int, help='feature dimension of original data')
-parser.add_argument('--batch_size', default=64, type=int, help='train batch size') # 128 64
+parser.add_argument('--latent_dim', default=20, type=int, help='latent dimension of autoencoder feature')
+
+# model
+parser.add_argument('--epochs', default=300, type=int, help='total number of epochs to run')
+parser.add_argument('--batch_size', default=64, type=int, help='train batch size') 
 parser.add_argument('--temp', default=0.1, type=float, help='trianing time temperature')
 parser.add_argument('--cls_weight', type=float, default=1e-1, help='ce learning weight')
 parser.add_argument('--pl_weight', type=float, default=1e-3, help='pl learning weight')
-parser.add_argument('--kl_weight', type=float, default=1e-1, help='kl divergence weight') # kl_weight
+parser.add_argument('--kl_weight', type=float, default=1e-1, help='kl divergence weight')
 parser.add_argument('--mse_weight', type=float, default=1e-2, help='mse learning weight')
+
+# optimization
 parser.add_argument('--lr', type=float, default=0.1, help='initial learning rate')
 parser.add_argument('--weight_decay', type=float, default=1e-10, help='weight decay') 
 parser.add_argument('--gamma', type=float, default=0.1, help='optimization gamma') 
+
+# sparse 
+parser.add_argument('--K', default=10, type=int, help='sparse dimension of latent feature')
 # parser.add_argument('--use_sparse', type=Boolean, default=True, help='sparse autoencoder')
 parser.add_argument('--use_sparse', type=Boolean, default=False, help='sparse autoencoder')
-# parser.add_argument('--l1', type=Boolean, default=True, help='L1')
-parser.add_argument('--l1', type=Boolean, default=False, help='L2')
+parser.add_argument('--L1', type=Boolean, default=True, help='L1')
+# parser.add_argument('--L1', type=Boolean, default=False, help='L2')
 
 args = parser.parse_args()
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
+
+# plot ori/sparse features of selected dataset
 cifar_train_transform = transforms.Compose([
         transforms.ColorJitter(brightness=0.24705882352941178), # 随机改变图像的亮度对比度和饱和度
         transforms.RandomRotation(degrees=5),
@@ -80,13 +79,6 @@ elif args.data_name=='cifar10':
 elif args.data_name=='cifar100':
         train_loader, val_loader = cifar100_data_loader(batch_size=args.batch_size)
 
-def KL_divergence( p, q):
-        p = torch.softmax(p, dim=1)
-        q = torch.softmax(q, dim=1)
-        s1 = torch.sum(p * torch.log(p/q))
-        s2 = torch.sum((1-p) * torch.log((1-p)/(1-q)))
-        return s1 + s2
-
 
 def main(): # numclass=0
     print(args)
@@ -95,7 +87,6 @@ def main(): # numclass=0
     optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)   #
     # optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150, 210, 270], gamma=args.gamma)
-    # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100, 150, 190], gamma=args.gamma)
     rho = torch.FloatTensor([0.005 for _ in range(args.K)]).unsqueeze(0).to(device) # args.latent_dim
 
     cls = CLoss()
@@ -103,6 +94,7 @@ def main(): # numclass=0
     mse = MSELoss()
     temp_acc = 0.93
     # mse = torch.nn.MSELoss()
+    loss_plot, loss_plot1, acc_plot, acc_plot1, mse_plot, mse_plot1 = [], [], [], [], [], []
     for epoch in range(args.epochs):
         train_mse_loss, train_loss, train_correct, train_total = 0, 0, 0, 0
         val_mse_loss, val_loss, val_correct, val_total = 0, 0, 0, 0
@@ -110,21 +102,20 @@ def main(): # numclass=0
         model.train()
         # for inputs, targets in tqdm(train_loader):
         for _, (inputs, targets) in enumerate(train_loader):  # tqdm
-            inputs = inputs.float().to(device) # [64, 3, 32, 32]
+            inputs = inputs.float().to(device).squeeze() # [64, 3, 32, 32]
             targets = targets.long().to(device)
+            
+            
             feat, encoded, decoded = model(inputs)
 
             MSE_loss = args.mse_weight * mse(feat,decoded,targets)
-            C_loss = args.cls_weight * cls(feat, decoded, targets, args.temp, args.l1)
+            C_loss = args.cls_weight * cls(feat, decoded, targets, args.temp, args.L1)
             if args.use_sparse:
                 Sparse_loss = args.kl_weight * sls(rho, encoded, targets, args.K)
-                # rho_hat, _ = feat.topk(args.K, dim=1,largest=False)
-                # Sparse_loss = KL_divergence(rho, rho_hat)
                 loss = C_loss + Sparse_loss
             else: 
                 loss = C_loss
             # print(MSE_loss, C_loss, Sparse_loss)
-            
             # loss = C_loss
 
             optimizer.zero_grad()
@@ -132,36 +123,35 @@ def main(): # numclass=0
             optimizer.step()
 
             _, predicts = torch.min(L2_dist(feat, decoded), dim=1)
-            # _, predicts = torch.min(torch.sum((feat - decoded), dim=2),dim=0)
             train_loss += loss.item()
             train_total += len(targets)
             train_correct += predicts.to(device).eq(targets).sum().item()
             train_mse_loss += MSE_loss.item()
-
+            
         train_loss = train_loss / len(train_loader)  # / 938 = 60032 / 64
         train_acc =  train_correct / train_total  # / 60,000
         train_mse_loss = train_mse_loss / len(train_loader)  # / 938 = 60032 / 64
-
+        loss_plot.append(train_loss)
+        acc_plot.append(train_acc)
+        mse_plot.append(train_mse_loss)
+            
         scheduler.step()
 
         model.eval()
         with torch.no_grad():
             # for inputs, targets in tqdm(val_loader):
-            for _, (inputs, targets) in enumerate(val_loader):   # tqdm
-                inputs = inputs.float().to(device)# [64, 3, 32, 32]
+            for _, (inputs, targets) in enumerate(val_loader):  
+                inputs = inputs.float().to(device) 
                 targets = targets.long().to(device)
                 feat, encoded, decoded = model(inputs)
 
                 MSE_loss = args.mse_weight * mse(feat,decoded,targets)
-                C_loss = args.cls_weight * cls(feat, decoded, targets, args.temp, args.l1)
+                C_loss = args.cls_weight * cls(feat, decoded, targets, args.temp, args.L1)
                 if args.use_sparse:
                     Sparse_loss = args.kl_weight * sls(rho, encoded, targets, args.K)
-                    # rho_hat, _ = feat.topk(args.K, dim=1,largest=False)
-                    # Sparse_loss = KL_divergence(rho, rho_hat)
                     loss = C_loss + Sparse_loss
                 else: 
                     loss = C_loss
-                    
                 # loss = C_loss
                 
                 _, predicts = torch.min(L2_dist(feat, decoded), dim=1)
@@ -172,14 +162,17 @@ def main(): # numclass=0
 
             val_loss = val_loss / len(val_loader)
             val_acc = val_correct / val_total
-            val_mse_loss = val_mse_loss / len(val_loader)  # / 938 = 60032 / 64
-
-        if (val_acc >= temp_acc): # (val_acc >= temp_acc): val_loss < temp_loss)
-            # temp_loss = val_loss
+            val_mse_loss = val_mse_loss / len(val_loader) 
+        loss_plot1.append(val_loss)
+        acc_plot1.append(val_acc)
+        mse_plot1.append(val_mse_loss)
+        
+        # save results
+        if (val_acc >= temp_acc):
             temp_acc = val_acc
-            torch.save(model.state_dict(), 'saved_models/%s/scpn_%s_ld_%d_ep_%d_l1_%d_s_%d_%.4f.pth'
-                       % (args.data_name, args.data_name, args.latent_dim, epoch, args.l1, args.use_sparse, val_acc))
-
+            torch.save(model.state_dict(), 'saved_models/%s/scpn_%s_ld_%d_ep_%d_L1_%d_s_%d_%.4f.pth'
+                       % (args.data_name, args.data_name, args.latent_dim, epoch, args.L1, args.use_sparse, val_acc))
+        # print results
         print(
             'Epoch : %03d  Train Loss: %.3f | Train Acc: %.3f%% | Val Loss: %.3f | Val Acc: %.3f%%'
             % (epoch, train_loss, 100 * train_acc, val_loss, 100 * val_acc))
@@ -193,6 +186,8 @@ def main(): # numclass=0
         writer.add_scalar('val/acc', val_acc, epoch)
         writer.add_scalar("val/mse_loss", val_mse_loss, epoch)
 
+
+    # plot ori/sparse features
     N_ROWS = 4
     N_COLS = 8
     view_data = [test_set[i][0] for i in range(N_ROWS * N_COLS)]
@@ -222,6 +217,56 @@ def main(): # numclass=0
         ax.get_yaxis().set_visible(False)
     plt.savefig('AE_Sparse_%s_%d.png'%(args.data_name, args.use_sparse), bbox_inches='tight', pad_inches=.25)
     plt.show()
+    
+    
+    # plot loss/acc/mse curves
+    plt.plot([e for e in range(len(loss_plot))],loss_plot)
+    plt.xlabel('epoch')
+    plt.ylabel('train loss')
+    plt.title('loss changed owing to epoch')
+    plt.show()
+    plt.savefig('%s train loss.png'%(args.data_name), bbox_inches='tight', pad_inches=.05) 
+    plt.close()
+    
+    plt.plot([e for e in range(len(loss_plot1))],loss_plot1)
+    plt.xlabel('epoch')
+    plt.ylabel('val loss')
+    plt.title('loss changed owing to epoch')
+    plt.show()
+    plt.savefig('%s val loss.png'%(args.data_name), bbox_inches='tight', pad_inches=.05) 
+    plt.close()
+    
+    plt.plot([e for e in range(len(acc_plot))],acc_plot)
+    plt.xlabel('epoch')
+    plt.ylabel('train accuracy')
+    plt.title('accuracy changed owing to epoch')
+    plt.show()
+    plt.savefig('%s train acc.png'%(args.data_name), bbox_inches='tight', pad_inches=.05) 
+    plt.close()
+    
+    plt.plot([e for e in range(len(acc_plot1))],acc_plot1)
+    plt.xlabel('epoch')
+    plt.ylabel('val accuracy')
+    plt.title('accuracy changed owing to epoch')
+    plt.show()
+    plt.savefig('%s val acc.png'%(args.data_name), bbox_inches='tight', pad_inches=.05) 
+    plt.close()
+    
+    plt.plot([e for e in range(len(mse_plot))],mse_plot)
+    plt.xlabel('epoch')
+    plt.ylabel('train mse')
+    plt.title('mse changed owing to epoch')
+    plt.show()
+    plt.savefig('%s train mse.png'%(args.data_name), bbox_inches='tight', pad_inches=.05) 
+    plt.close()
+    
+    plt.plot([e for e in range(len(mse_plot1))],mse_plot1)
+    plt.xlabel('epoch')
+    plt.ylabel('val mse')
+    plt.title('mse changed owing to epoch')
+    plt.show()
+    plt.savefig('%s val mse.png'%(args.data_name), bbox_inches='tight', pad_inches=.05) 
+    plt.close()
 
 
 if __name__ == '__main__':
