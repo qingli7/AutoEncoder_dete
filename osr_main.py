@@ -14,17 +14,17 @@ from osr_data import *
 parser = argparse.ArgumentParser(description='Train Convolutionary Prototype Learning Models')
 
 # dataset
-parser.add_argument('--data_name', default='mnist', type=str, help='dataset name to use')
-parser.add_argument('--data_channel', default=1, type=int, help='channel of dataset')
-parser.add_argument('--num_classes', default=10, type=int, help='class number for the dataset')
+# parser.add_argument('--data_name', default='mnist', type=str, help='dataset name to use')
+# parser.add_argument('--data_channel', default=1, type=int, help='channel of dataset')
+# parser.add_argument('--num_classes', default=10, type=int, help='class number for the dataset')
 
 # parser.add_argument('--data_name', default='cifar10', type=str, help='dataset name to use')
 # parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
 # parser.add_argument('--num_classes', default=10, type=int, help='class number for the dataset')
 
-# parser.add_argument('--data_name', default='svhn', type=str, help='dataset name to use')
-# parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
-# parser.add_argument('--num_classes', default=10, type=int, help='class number for the dataset')
+parser.add_argument('--data_name', default='svhn', type=str, help='dataset name to use')
+parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
+parser.add_argument('--num_classes', default=10, type=int, help='class number for the dataset')
 
 # parser.add_argument('--data_name', default='cifar100', type=str, help='dataset name to use')
 # parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
@@ -62,28 +62,16 @@ args = parser.parse_args()
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-# plot ori/sparse features of selected dataset
-cifar_train_transform = transforms.Compose([
-        transforms.ColorJitter(brightness=0.24705882352941178), # 随机改变图像的亮度对比度和饱和度
-        transforms.RandomRotation(degrees=5),
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomCrop((32, 32), padding=3),
-        transforms.ToTensor(),
-    ])
 if args.data_name=='mnist':
-        train_loader, val_loader, _= mnist_data_loader(batch_size=args.batch_size)
-        test_set = MNIST(root='./data/mnist_data', train=False, transform=transforms.ToTensor(), download=True)
-        image_shape = (1,1,28,28)
+    train_loader, val_loader, _= mnist_data_loader(batch_size=args.batch_size)
 elif args.data_name=='cifar10':
-        train_loader, val_loader, _ = cifar10_data_loader(batch_size=args.batch_size)
-        test_set = CIFAR10(root='./data/cifar10_data', train=False, transform=cifar_train_transform, download=True)
-        image_shape = (1,3,32,32)
+    train_loader, val_loader, _ = cifar10_data_loader(batch_size=args.batch_size)
 elif args.data_name=='cifar100':
-        train_loader, val_loader, _ = cifar100_data_loader(batch_size=args.batch_size)
+    train_loader, val_loader, _ = cifar100_data_loader(batch_size=args.batch_size)
 elif args.data_name=='svhn':
-        train_loader, val_loader, _ = svhn_data_loader(batch_size=args.batch_size)
+    train_loader, val_loader, _ = svhn_data_loader(batch_size=args.batch_size)
 elif args.data_name=='tiny_imagenet':
-        train_loader, val_loader, _ = imagenet_data_loader(batch_size=args.batch_size)
+    train_loader, val_loader, _ = imagenet_data_loader(batch_size=args.batch_size)
 
 
 def main(): # numclass=0
@@ -192,37 +180,6 @@ def main(): # numclass=0
         writer.add_scalar("val/mse_loss", val_mse_loss, epoch)
 
 
-    # # plot ori/sparse features
-    # N_ROWS = 4
-    # N_COLS = 8
-    # view_data = [test_set[i][0] for i in range(N_ROWS * N_COLS)]
-    # view_target = [test_set[i][1] for i in range(N_ROWS * N_COLS)]
-    # plt.figure(figsize=(20, 4))
-    # plt.figure(figsize=(8,8))
-    # for i in range(N_ROWS * N_COLS):
-    #     # original image
-    #     r = i // N_COLS
-    #     c = i % N_COLS + 1  # % 是求余数，// 是求商+向下取整
-    #     ax = plt.subplot(2 * N_ROWS, N_COLS, 2 * r * N_COLS + c)
-
-    #     x = view_data[i].reshape(image_shape).to(device)
-    #     feat, encoded, decoded = model(x)
-    #     plt.imshow(feat.detach().cpu().squeeze().numpy().reshape(16,32))
-
-    #     # plt.imshow(view_data[i].squeeze())
-    #     plt.gray()
-    #     ax.get_xaxis().set_visible(False)
-    #     ax.get_yaxis().set_visible(False)
-
-    #     # reconstructed image
-    #     ax = plt.subplot(2 * N_ROWS, N_COLS, 2 * r * N_COLS + c + N_COLS)
-    #     plt.imshow(decoded[:,view_target[i],:].detach().cpu().squeeze().numpy().reshape(16,32))
-    #     plt.gray()
-    #     ax.get_xaxis().set_visible(False)
-    #     ax.get_yaxis().set_visible(False)
-    # plt.savefig('AE_Sparse_%s_%d.png'%(args.data_name, args.use_sparse), bbox_inches='tight', pad_inches=.25)
-    # plt.show()
-    
     
     # # plot loss/acc/mse curves
     # plt.plot([e for e in range(len(loss_plot))],loss_plot)
