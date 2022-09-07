@@ -7,9 +7,7 @@ from xmlrpc.client import Boolean
 import matplotlib.pyplot as plt
 from loss import *
 from model import SparseAutoencoder_all
-import torchvision.transforms as transforms
-from torchvision.datasets import MNIST, FashionMNIST, CIFAR10, CIFAR100
-from data import mnist_data_loader, fashion_mnist_data_loader, cifar10_data_loader, cifar100_data_loader
+from data import mnist_data_loader, cifar10_data_loader, cifar100_data_loader
 
 parser = argparse.ArgumentParser(description='Train Convolutionary Prototype Learning Models')
 
@@ -53,27 +51,15 @@ args = parser.parse_args()
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-# plot ori/sparse features of selected dataset
-cifar_train_transform = transforms.Compose([
-        transforms.ColorJitter(brightness=0.24705882352941178), # 随机改变图像的亮度对比度和饱和度
-        transforms.RandomRotation(degrees=5),
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomCrop((32, 32), padding=3),
-        transforms.ToTensor(),
-    ])
 if args.data_name=='mnist':
         train_loader, val_loader = mnist_data_loader(batch_size=args.batch_size)
-        test_set = MNIST(root='./data/mnist_data', train=False, transform=transforms.ToTensor(), download=True)
-        image_shape = (1,1,28,28)
 elif args.data_name=='cifar10':
         train_loader, val_loader = cifar10_data_loader(batch_size=args.batch_size)
-        test_set = CIFAR10(root='./data/cifar10_data', train=False, transform=cifar_train_transform, download=True)
-        image_shape = (1,3,32,32)
 elif args.data_name=='cifar100':
         train_loader, val_loader = cifar100_data_loader(batch_size=args.batch_size)
 
 
-def main(): # numclass=0
+def main(): 
     print(args)
 
     model = SparseAutoencoder_all(in_channel=args.data_channel,num_classes=args.num_classes,feature_dim=args.feature_dim, latent_dim=args.latent_dim).to(device) #
@@ -178,38 +164,6 @@ def main(): # numclass=0
         writer.add_scalar('val/acc', val_acc, epoch)
         writer.add_scalar("val/mse_loss", val_mse_loss, epoch)
 
-
-    # # plot ori/sparse features
-    # N_ROWS = 4
-    # N_COLS = 8
-    # view_data = [test_set[i][0] for i in range(N_ROWS * N_COLS)]
-    # view_target = [test_set[i][1] for i in range(N_ROWS * N_COLS)]
-    # plt.figure(figsize=(20, 4))
-    # plt.figure(figsize=(8,8))
-    # for i in range(N_ROWS * N_COLS):
-    #     # original image
-    #     r = i // N_COLS
-    #     c = i % N_COLS + 1  # % 是求余数，// 是求商+向下取整
-    #     ax = plt.subplot(2 * N_ROWS, N_COLS, 2 * r * N_COLS + c)
-
-    #     x = view_data[i].reshape(image_shape).to(device)
-    #     feat, encoded, decoded = model(x)
-    #     plt.imshow(feat.detach().cpu().squeeze().numpy().reshape(16,32))
-
-    #     # plt.imshow(view_data[i].squeeze())
-    #     plt.gray()
-    #     ax.get_xaxis().set_visible(False)
-    #     ax.get_yaxis().set_visible(False)
-
-    #     # reconstructed image
-    #     ax = plt.subplot(2 * N_ROWS, N_COLS, 2 * r * N_COLS + c + N_COLS)
-    #     plt.imshow(decoded[:,view_target[i],:].detach().cpu().squeeze().numpy().reshape(16,32))
-    #     plt.gray()
-    #     ax.get_xaxis().set_visible(False)
-    #     ax.get_yaxis().set_visible(False)
-    # plt.savefig('AE_Sparse_%s_%d.png'%(args.data_name, args.use_sparse), bbox_inches='tight', pad_inches=.25)
-    # plt.show()
-    
     
     # plot loss/acc/mse curves
     plt.plot([e for e in range(len(loss_plot))],loss_plot)
