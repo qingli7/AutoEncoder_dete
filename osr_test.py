@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from sklearn import metrics
 from scipy import interpolate
 from model import SparseAutoencoder_all
-from data import *
+from osr_data import *
 from torchvision.datasets import MNIST, FashionMNIST, CIFAR10, CIFAR100
 import torchvision.transforms as transforms
 
@@ -19,18 +19,16 @@ cifar_train_transform = transforms.Compose([
         transforms.ToTensor(),
     ])
 
-# pretrain = 'result_models/scpn_mnist_ld_20_ep_299_l1_1_s_1_0.9963.pth'
+# pretrain = 'osr_result_models/osr_mnist_ld_20_ep_299_l1_1_s_1_0.9963.pth'
 # model = SparseAutoencoder_all(in_channel=1,num_classes=10,feature_dim=512, latent_dim=20).to(device) #
 # test_data = MNIST(root='./data/mnist_data', train=False, transform=transforms.ToTensor(), download=True)
-# train_loader, val_loader = mnist_data_loader()
-# ood_train_loader, ood_val_loader = fashion_mnist_data_loader()
+# train_loader, val_loader, ood_var_loader = mnist_data_loader()
 
-pretrain = 'result_models/scpn_cifar10_ld_20_ep_285_l1_1_s_0_0.9494.pth'
+pretrain = 'osr_result_models/osr_cifar10_ld_20_ep_220_L1_1_s_0_0.9762.pth'
 model = SparseAutoencoder_all(in_channel=3,num_classes=10,feature_dim=512, latent_dim=20).to(device) #
 test_data = CIFAR10(root='./data/cifar10_data', train=False, transform=cifar_train_transform, download=True)
-train_loader, val_loader = cifar10_data_loader()
-# ood_train_loader, ood_val_loader = svhn_data_loader()
-ood_train_loader, ood_val_loader = cifar100_data_loader()
+train_loader, val_loader, ood_var_loader = cifar10_data_loader()
+
 
 model.load_state_dict(torch.load(pretrain, map_location='cpu'))
 model.eval()
@@ -48,7 +46,7 @@ def main():
     print('\nError Rate: {:.2f}'.format(100 * num_wrong / (num_wrong + num_right)))
     
     # OOD Detection
-    out_score = get_ood_scores(ood_val_loader)
+    out_score = get_ood_scores(ood_var_loader)
     print('\nin_score and out_score')
     print(in_score[:10], out_score[:10])
     measures = get_measures(in_score, out_score)
