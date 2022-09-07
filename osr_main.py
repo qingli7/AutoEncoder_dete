@@ -7,8 +7,6 @@ from xmlrpc.client import Boolean
 import matplotlib.pyplot as plt
 from loss import *
 from model import SparseAutoencoder_all
-import torchvision.transforms as transforms
-from torchvision.datasets import MNIST, FashionMNIST, CIFAR10, CIFAR100
 from osr_data import *
 
 parser = argparse.ArgumentParser(description='Train Convolutionary Prototype Learning Models')
