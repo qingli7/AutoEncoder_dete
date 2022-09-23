@@ -2,7 +2,7 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from torchvision.datasets import MNIST, FashionMNIST, CIFAR10, CIFAR100, SVHN, ImageNet
 from data_aug import *
-
+from TinyImageNet import TinyImageNet
 
 
 def mnist_data_loader(mnist_folder='./data/mnist_data', batch_size=64):
@@ -79,15 +79,15 @@ def svhn_data_loader(folder='./data/svhn_data', batch_size=64):
     return train_loader, test_loader
 
 
-def imagenet_data_loader(folder='./data/imagenet_data', batch_size=64):
+def imagenet_data_loader(folder='./data/tiny-imagenet-200', batch_size=64):
     transform = transforms.Compose([
         transforms.ToTensor(),
     ])
-    train_set = ImageNet(folder, split='train', download=True, transform=transform)
-    test_set = ImageNet(folder, split='test', download=True, transform=transform)
+    train_set = TinyImageNet(folder, train=True, transform=transform)
+    val_set = TinyImageNet(folder, train=False, transform=transform)
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=True)
-    return train_loader, test_loader
+    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=True)
+    return train_loader, val_loader
 
 
 # # white/real/blind/hybrid noisy image denoising
@@ -123,7 +123,6 @@ train_transform_noise=transforms.Compose([
 
 if __name__ == '__main__':
     data_train, data_test = mnist_data_loader()  # checked
-    data_train, data_test = fashion_mnist_data_loader()  # checked
     data_train, data_test = cifar10_data_loader()  # checked
     data_train, data_test = cifar100_data_loader()  # checked
     for x, y in data_train:

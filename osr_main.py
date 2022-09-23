@@ -16,60 +16,56 @@ parser = argparse.ArgumentParser(description='Train Convolutionary Prototype Lea
 # parser.add_argument('--data_channel', default=1, type=int, help='channel of dataset')
 # parser.add_argument('--num_classes', default=10, type=int, help='class number for the dataset')
 
-# parser.add_argument('--data_name', default='cifar10', type=str, help='dataset name to use')
+# parser.add_argument('--data_name', default='svhn', type=str, help='dataset name to use')
 # parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
 # parser.add_argument('--num_classes', default=10, type=int, help='class number for the dataset')
 
-parser.add_argument('--data_name', default='svhn', type=str, help='dataset name to use')
+parser.add_argument('--data_name', default='cifar10', type=str, help='dataset name to use')
 parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
 parser.add_argument('--num_classes', default=10, type=int, help='class number for the dataset')
-
-# parser.add_argument('--data_name', default='cifar100', type=str, help='dataset name to use')
-# parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
-# parser.add_argument('--num_classes', default=100, type=int, help='class number for the dataset')
-
-# parser.add_argument('--data_name', default='tiny_imagenet', type=str, help='dataset name to use')
-# parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
-# parser.add_argument('--num_classes', default=200, type=int, help='class number for the dataset')
+parser.add_argument('--row', default=1, type=int, help='sample the dataset')
 
 parser.add_argument('--feature_dim', default=512, type=int, help='feature dimension of original data')
 parser.add_argument('--latent_dim', default=20, type=int, help='latent dimension of autoencoder feature')
+# parser.add_argument('--row', default=0, type=int, help='sample the dataset')
 
 # model
 parser.add_argument('--epochs', default=300, type=int, help='total number of epochs to run')
 parser.add_argument('--batch_size', default=64, type=int, help='train batch size') 
 parser.add_argument('--temp', default=0.1, type=float, help='trianing time temperature')
-parser.add_argument('--cls_weight', type=float, default=1e-1, help='ce learning weight')
-parser.add_argument('--pl_weight', type=float, default=1e-3, help='pl learning weight')
+parser.add_argument('--cls_weight', type=float, default=1e-1, help='cross entropy learning weight')
 parser.add_argument('--kl_weight', type=float, default=1e-1, help='kl divergence weight')
-parser.add_argument('--mse_weight', type=float, default=1e-2, help='mse learning weight')
+parser.add_argument('--mse_weight', type=float, default=0.9, help='mean square evaluation learning weight')
 
 # optimization
-parser.add_argument('--lr', type=float, default=0.1, help='initial learning rate')
+parser.add_argument('--lr', type=float, default=1e-1, help='initial learning rate')
 parser.add_argument('--weight_decay', type=float, default=1e-10, help='weight decay') 
+# parser.add_argument('--weight_decay', type=float, default=1e-8, help='weight decay') 
 parser.add_argument('--gamma', type=float, default=0.1, help='optimization gamma') 
+# parser.add_argument('--gamma', type=float, default=0.5, help='optimization gamma') 
 
 # sparse 
 parser.add_argument('--K', default=10, type=int, help='sparse dimension of latent feature')
-# parser.add_argument('--use_sparse', type=Boolean, default=True, help='sparse autoencoder')
-parser.add_argument('--use_sparse', type=Boolean, default=False, help='sparse autoencoder')
-parser.add_argument('--L1', type=Boolean, default=True, help='L1')
-# parser.add_argument('--L1', type=Boolean, default=False, help='L2')
+parser.add_argument('--use_sparse', type=Boolean, default=True, help='sparse autoencoder')
+# parser.add_argument('--use_sparse', type=Boolean, default=False, help='sparse autoencoder')
+# parser.add_argument('--use_mse', type=Boolean, default=True, help='mse loss')
+parser.add_argument('--use_mse', type=Boolean, default=False, help='mse loss')
+
 
 args = parser.parse_args()
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 if args.data_name=='mnist':
-    train_loader, val_loader, _= mnist_data_loader(batch_size=args.batch_size)
+    train_loader, val_loader, _= mnist_data_loader(batch_size=args.batch_size, row=args.row)
 elif args.data_name=='cifar10':
-    train_loader, val_loader, _ = cifar10_data_loader(batch_size=args.batch_size)
+    train_loader, val_loader, _ = cifar10_data_loader(batch_size=args.batch_size, row=args.row)
 elif args.data_name=='cifar100':
-    train_loader, val_loader, _ = cifar100_data_loader(batch_size=args.batch_size)
+    train_loader, val_loader, _ = cifar100_data_loader(batch_size=args.batch_size, row=args.row)
 elif args.data_name=='svhn':
-    train_loader, val_loader, _ = svhn_data_loader(batch_size=args.batch_size)
+    train_loader, val_loader, _ = svhn_data_loader(batch_size=args.batch_size, row=args.row)
 elif args.data_name=='tiny_imagenet':
-    train_loader, val_loader, _ = imagenet_data_loader(batch_size=args.batch_size)
+    train_loader, val_loader, _ = imagenet_data_loader(batch_size=args.batch_size, row=args.row)
 
 
 def main(): # numclass=0
@@ -79,12 +75,15 @@ def main(): # numclass=0
     optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)   #
     # optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150, 210, 270], gamma=args.gamma)
+    # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 130, 170], gamma=args.gamma)
+    # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[50, 150, 210, 270], gamma=args.gamma)
+    
     rho = torch.FloatTensor([0.005 for _ in range(args.K)]).unsqueeze(0).to(device) # args.latent_dim
 
     cls = CLoss()
     sls = SparseLoss()
     mse = MSELoss()
-    temp_acc = 0.93
+    temp_acc = 0.9
     # mse = torch.nn.MSELoss()
     loss_plot, loss_plot1, acc_plot, acc_plot1, mse_plot, mse_plot1 = [], [], [], [], [], []
     for epoch in range(args.epochs):
@@ -99,15 +98,14 @@ def main(): # numclass=0
 
             feat, encoded, decoded = model(inputs)
 
-            MSE_loss = args.mse_weight * mse(feat,decoded,targets)
-            C_loss = args.cls_weight * cls(feat, decoded, targets, args.temp, args.L1)
+            MSE_loss = args.mse_weight * mse(feat,decoded,targets) + (1-args.mse_weight) * mse(feat,decoded,targets,obj=False)
+            C_loss = args.cls_weight * cls(feat, decoded, targets, args.temp)
+            loss = C_loss
+            if args.use_mse:
+                loss = loss + (1-args.cls_weight )*MSE_loss
             if args.use_sparse:
-                Sparse_loss = args.kl_weight * sls(rho, encoded, targets, args.K)
-                loss = C_loss + Sparse_loss
-            else: 
-                loss = C_loss
-            # print(MSE_loss, C_loss, Sparse_loss)
-            # loss = C_loss
+                Sparse_loss = args.kl_weight * sls(encoded, targets)
+                loss = loss + Sparse_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -136,14 +134,14 @@ def main(): # numclass=0
                 targets = targets.long().to(device)
                 feat, encoded, decoded = model(inputs)
 
-                MSE_loss = args.mse_weight * mse(feat,decoded,targets)
-                C_loss = args.cls_weight * cls(feat, decoded, targets, args.temp, args.L1)
+                MSE_loss = args.mse_weight * mse(feat,decoded,targets) + (1-args.mse_weight) * mse(feat,decoded,targets,obj=False)
+                C_loss = args.cls_weight * cls(feat, decoded, targets, args.temp)
+                loss = C_loss
+                if args.use_mse:
+                    loss = loss + (1-args.cls_weight )*MSE_loss
                 if args.use_sparse:
-                    Sparse_loss = args.kl_weight * sls(rho, encoded, targets, args.K)
-                    loss = C_loss + Sparse_loss
-                else: 
-                    loss = C_loss
-                # loss = C_loss
+                    Sparse_loss = args.kl_weight * sls(encoded, targets)
+                    loss = loss + Sparse_loss
                 
                 _, predicts = torch.min(L2_dist(feat, decoded), dim=1)
                 val_loss = val_loss + loss.item()
@@ -161,8 +159,8 @@ def main(): # numclass=0
         # save results
         if (val_acc >= temp_acc):
             temp_acc = val_acc
-            torch.save(model.state_dict(), 'osr_saved_models/%s/osr_%s_ld_%d_ep_%d_L1_%d_s_%d_%.4f.pth'
-                       % (args.data_name, args.data_name, args.latent_dim, epoch, args.L1, args.use_sparse, val_acc))
+            torch.save(model.state_dict(), 'osr_saved_models/%s_%d/osr_%s_%d_ep_%d_w_%.1f_m_%d_s_%d_%.4f.pth'
+                       % (args.data_name, args.row, args.data_name, args.row, epoch, args.mse_weight, args.use_mse, args.use_sparse, val_acc))
         # print results
         print(
             'Epoch : %03d  Train Loss: %.3f | Train Acc: %.3f%% | Val Loss: %.3f | Val Acc: %.3f%%'
