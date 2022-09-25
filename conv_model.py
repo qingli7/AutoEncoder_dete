@@ -4,21 +4,26 @@ import torchvision
 from wide_resnet import WideResNet
 
 
-class ConvAutoencoder(nn.Module):
-    def __init__(self, in_channel, num_classes, feature_dim, latent_dim):
-        super(ConvAutoencoder, self).__init__()
+class encode_block(nn.Module):
+    def __init__(self, in_channel):
+        super(encode_block, self).__init__()
         
-        # self.cls = WideResNet(depth=28, in_channel=in_channel,num_classes=num_classes, feature_dim=feature_dim, widen_factor=10)
-
         self.encoder = nn.Sequential(
-            nn.Conv2d(1, 16, 3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            nn.Conv2d(16, 8, 3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2)
-        )
+                nn.Conv2d(in_channel, 16, 3, padding=1),
+                nn.ReLU(inplace=True),
+                nn.MaxPool2d(2),
+                nn.Conv2d(16, 8, 3, padding=1),
+                nn.ReLU(inplace=True),
+                nn.MaxPool2d(2)
+            )
+        
+    def forward(self, x):
+        return self.encoder(x)
 
+class decode_block(nn.Module):
+    def __init__(self, in_channel):
+        super(decode_block, self).__init__()
+        
         self.decoder = nn.Sequential(
             nn.Conv2d(8, 8, 3, padding=1),
             nn.ReLU(inplace=True),
@@ -29,9 +34,19 @@ class ConvAutoencoder(nn.Module):
             nn.Conv2d(16, 1, 3, padding=1),
             nn.Tanh()
         )
+        
+    def forward(self, x):
+        return self.decoder(x)
 
-        self.encode = nn.ModuleList([self.encoder for _ in range(num_classes)])
-        self.decode = nn.ModuleList([self.decoder for _ in range(num_classes)])
+
+class ConvAutoencoder(nn.Module):
+    def __init__(self, in_channel, num_classes, feature_dim, latent_dim):
+        super(ConvAutoencoder, self).__init__()
+        
+        self.num_classes = num_classes
+        
+        self.encoders = nn.ModuleList([encode_block(in_channel) for _ in range(num_classes)])
+        self.decoders = nn.ModuleList([decode_block(in_channel) for _ in range(num_classes)])
         
 
     def forward(self, x):
@@ -42,19 +57,13 @@ class ConvAutoencoder(nn.Module):
         """
         encoded = []
         decoded = []
-        for i in range(len(self.encode)):
-            enco = x
-            for layer in self.encode[i]:
-                # print(i, layer)
-                enco = layer(enco)
+        for i in range(self.num_classes):
+            enco = self.encoders[i](x)
             encoded.append(enco)
-            
-            deco = enco
-            for layer in self.decode[i]:
-                deco = layer(deco)
+            deco = self.decoders[i](enco)
             decoded.append(deco)
-            breakpoint()
-            # print(i,':',x[0][0][1][1],enco[0][0][1][1],deco[0][0][1][1])
+           
+            # breakpoint()
 
         encoded = torch.stack(encoded, dim=1)
         decoded = torch.stack(decoded, dim=1)

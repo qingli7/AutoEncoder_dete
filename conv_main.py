@@ -13,13 +13,13 @@ import itertools
 parser = argparse.ArgumentParser(description='Train Convolutionary Prototype Learning Models')
 
 # # dataset
-parser.add_argument('--data_name', default='mnist', type=str, help='dataset name to use')
-parser.add_argument('--data_channel', default=1, type=int, help='channel of dataset')
-parser.add_argument('--num_classes', default=10, type=int, help='class number for the dataset')
-
-# parser.add_argument('--data_name', default='cifar10', type=str, help='dataset name to use')
-# parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
+# parser.add_argument('--data_name', default='mnist', type=str, help='dataset name to use')
+# parser.add_argument('--data_channel', default=1, type=int, help='channel of dataset')
 # parser.add_argument('--num_classes', default=10, type=int, help='class number for the dataset')
+
+parser.add_argument('--data_name', default='cifar10', type=str, help='dataset name to use')
+parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
+parser.add_argument('--num_classes', default=10, type=int, help='class number for the dataset')
 
 # parser.add_argument('--data_name', default='cifar100', type=str, help='dataset name to use')
 # parser.add_argument('--data_channel', default=3, type=int, help='channel of dataset')
@@ -42,7 +42,7 @@ parser.add_argument('--mse_weight', type=float, default=0.1, help='mean square e
 parser.add_argument('--kl_weight', type=float, default=1e-1, help='kl divergence weight')
 
 # optimization
-parser.add_argument('--lr', type=float, default=0.1, help='initial learning rate')
+parser.add_argument('--lr', type=float, default=0.01, help='initial learning rate')
 parser.add_argument('--weight_decay', type=float, default=1e-10, help='weight decay') 
 # parser.add_argument('--weight_decay', type=float, default=1e-8, help='weight decay') 
 parser.add_argument('--gamma', type=float, default=0.1, help='optimization gamma') 
@@ -50,8 +50,8 @@ parser.add_argument('--gamma', type=float, default=0.1, help='optimization gamma
 
 # sparse 
 parser.add_argument('--K', default=10, type=int, help='sparse dimension of latent feature')
-parser.add_argument('--use_sparse', type=Boolean, default=True, help='sparse autoencoder')
-# parser.add_argument('--use_sparse', type=Boolean, default=False, help='sparse autoencoder')
+# parser.add_argument('--use_sparse', type=Boolean, default=True, help='sparse autoencoder')
+parser.add_argument('--use_sparse', type=Boolean, default=False, help='sparse autoencoder')
 # parser.add_argument('--use_mse', type=Boolean, default=True, help='mse loss')
 parser.add_argument('--use_mse', type=Boolean, default=False, help='mse loss')
 
