@@ -7,7 +7,7 @@ from xmlrpc.client import Boolean
 import matplotlib.pyplot as plt
 from loss import *
 from model import SparseAutoencoder_all
-from data import *
+from multi_data import *
 
 from torch import distributed
 
@@ -34,7 +34,7 @@ parser.add_argument('--feature_dim', default=512, type=int, help='feature dimens
 parser.add_argument('--latent_dim', default=40, type=int, help='latent dimension of autoencoder feature')
 
 # model
-parser.add_argument('--depth', default=28, type=int, help='total number of network depth')
+parser.add_argument('--depth', default=40, type=int, help='total number of network depth')
 parser.add_argument('--epochs', default=300, type=int, help='total number of epochs to run')
 parser.add_argument('--batch_size', default=64, type=int, help='train batch size') 
 parser.add_argument('--temp', default=0.1, type=float, help='trianing time temperature')
@@ -57,45 +57,45 @@ parser.add_argument('--use_sparse', type=Boolean, default=False, help='sparse au
 parser.add_argument('--use_mse', type=Boolean, default=False, help='mse loss')
 
 # multi gpu
-# parser.add_argument('--ngpu', default=2, help='number of gpu')
-# parser.add_argument('--local_rank', default=0, type=int, help='local device id')
+parser.add_argument('--ngpu', default=3, help='number of gpu')
+parser.add_argument('--local_rank', default=0, type=int, help='local device id')
 
 args = parser.parse_args()
 
-# distributed.init_process_group("nccl", world_size=args.ngpu, rank=args.local_rank)   # multi gpu
-# torch.cuda.set_device(args.local_rank)
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+distributed.init_process_group("nccl", world_size=args.ngpu, rank=args.local_rank)   # multi gpu
+torch.cuda.set_device(args.local_rank)
+# device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-if args.data_name=='mnist':
-        train_loader, test_loader = mnist_data_loader(batch_size=args.batch_size)
-elif args.data_name=='cifar10':
-        train_loader, test_loader = cifar10_data_loader(batch_size=args.batch_size)
-elif args.data_name=='cifar100':
-        train_loader, test_loader = cifar100_data_loader(batch_size=args.batch_size)
-elif args.data_name=='imagenet':
-        train_loader, test_loader = imagenet_data_loader(batch_size=args.batch_size)
-        
 # if args.data_name=='mnist':
-#     train_sampler, train_loader, test_loader = mnist_data_loader(batch_size=args.batch_size)   # multi gpu
+#         train_loader, val_loader = mnist_data_loader(batch_size=args.batch_size)
 # elif args.data_name=='cifar10':
-#     train_sampler,  train_loader, test_loader = cifar10_data_loader(batch_size=args.batch_size)
+#         train_loader, val_loader = cifar10_data_loader(batch_size=args.batch_size)
 # elif args.data_name=='cifar100':
-#     train_sampler, train_loader, test_loader = cifar100_data_loader(batch_size=args.batch_size)
+#         train_loader, val_loader = cifar100_data_loader(batch_size=args.batch_size)
 # elif args.data_name=='imagenet':
-#     train_sampler, train_loader, test_loader = imagenet_data_loader(batch_size=args.batch_size)
+#         train_loader, val_loader = imagenet_data_loader(batch_size=args.batch_size)
+        
+if args.data_name=='mnist':
+    train_sampler, train_loader, test_loader = mnist_data_loader(batch_size=args.batch_size)   # multi gpu
+elif args.data_name=='cifar10':
+    train_sampler,  train_loader, test_loader = cifar10_data_loader(batch_size=args.batch_size)
+elif args.data_name=='cifar100':
+    train_sampler, train_loader, test_loader = cifar100_data_loader(batch_size=args.batch_size)
+elif args.data_name=='imagenet':
+    train_sampler, train_loader, test_loader = imagenet_data_loader(batch_size=args.batch_size)
 
 def main(): 
     print(args)
 
-    model = SparseAutoencoder_all(in_channel=args.data_channel,num_classes=args.num_classes,feature_dim=args.feature_dim, latent_dim=args.latent_dim, depth=args.depth).to(device)
-    # model = nn.parallel.DistributedDataParallel(model.cuda(args.local_rank),device_ids=[args.local_rank])  # multi gpu
+    model = SparseAutoencoder_all(in_channel=args.data_channel,num_classes=args.num_classes,feature_dim=args.feature_dim, latent_dim=args.latent_dim, depth=args.depth)   # multi gpu
+    model = nn.parallel.DistributedDataParallel(model.cuda(args.local_rank),device_ids=[args.local_rank])  # multi gpu
     optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)   #
     # optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[50, 150, 210, 270], gamma=args.gamma)
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 130, 170], gamma=args.gamma)
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150, 210, 270], gamma=args.gamma)
-    rho = torch.FloatTensor([0.01 for _ in range(args.K)]).unsqueeze(0).to(device)
+    rho = torch.FloatTensor([0.01 for _ in range(args.K)]).unsqueeze(0).cuda(args.local_rank) 
     
     cls = CLoss()
     sls = SparseLoss()
@@ -108,11 +108,13 @@ def main():
         train_mse_loss, train_loss, train_correct, train_total = 0, 0, 0, 0
         val_mse_loss, val_loss, val_correct, val_total = 0, 0, 0, 0
         
+        train_sampler.set_epoch(epoch)  # multi gpu
+
         model.train()
         # for inputs, targets in tqdm(train_loader):
         for _, (inputs, targets) in enumerate(train_loader):  # tqdm
-            inputs = inputs.float().to(device) # [64, 3, 32, 32]   # multi gpu
-            targets = targets.long().to(device)
+            inputs = inputs.float().cuda(args.local_rank) # to(device) # [64, 3, 32, 32]   # multi gpu
+            targets = targets.long().cuda(args.local_rank) # to(device)
             
             feat, encoded, decoded = model(inputs)
             C_loss = args.cls_weight * cls(feat, decoded, targets, args.temp)
@@ -132,7 +134,7 @@ def main():
             _, predicts = torch.min(L2_dist(feat, decoded), dim=1)
             train_loss += loss.item()
             train_total += len(targets)
-            train_correct += predicts.to(device).eq(targets).sum().item()
+            train_correct += predicts.cuda(args.local_rank).eq(targets).sum().item()   # multi gpu
             # train_mse_loss += MSE_loss.item()
             
         train_loss = train_loss / len(train_loader)  # / 938 = 60032 / 64
@@ -148,8 +150,8 @@ def main():
         with torch.no_grad():
             # for inputs, targets in tqdm(val_loader):
             for _, (inputs, targets) in enumerate(test_loader):  
-                inputs = inputs.float().to(device)
-                targets = targets.long().to(device)
+                inputs = inputs.float().cuda(args.local_rank) 
+                targets = targets.long().cuda(args.local_rank)
                 feat, encoded, decoded = model(inputs)
 
                 C_loss = args.cls_weight * cls(feat, decoded, targets, args.temp)
@@ -164,7 +166,7 @@ def main():
                 _, predicts = torch.min(L2_dist(feat, decoded), dim=1)
                 val_loss = val_loss + loss.item()
                 val_total += len(targets)
-                val_correct += predicts.to(device).eq(targets).sum().item()
+                val_correct += predicts.cuda(args.local_rank).eq(targets).sum().item()   # multi gpu
                 # val_mse_loss += MSE_loss.item()
 
             val_loss = val_loss / len(test_loader)
@@ -186,12 +188,12 @@ def main():
 
 
         # record training logs
-        # writer.add_scalar('train/loss', train_loss, epoch)
-        # writer.add_scalar('train/acc', train_acc, epoch)
-        # writer.add_scalar('val/loss', val_loss, epoch)
-        # # writer.add_scalar("train/mse_loss", train_mse_loss, epoch)
-        # writer.add_scalar('val/acc', val_acc, epoch)
-        # # writer.add_scalar("val/mse_loss", val_mse_loss, epoch)
+        writer.add_scalar('train/loss', train_loss, epoch)
+        writer.add_scalar('train/acc', train_acc, epoch)
+        writer.add_scalar('val/loss', val_loss, epoch)
+        # writer.add_scalar("train/mse_loss", train_mse_loss, epoch)
+        writer.add_scalar('val/acc', val_acc, epoch)
+        # writer.add_scalar("val/mse_loss", val_mse_loss, epoch)
 
     
     # # plot loss/acc/mse curves
@@ -247,8 +249,8 @@ def main():
 if __name__ == '__main__':
     
     # remove old log file
-    # logdir = './tensorboard/GCPL/'
-    # shutil.rmtree(logdir, True)
-    # writer = SummaryWriter(logdir)
+    logdir = './tensorboard/GCPL/'
+    shutil.rmtree(logdir, True)
+    writer = SummaryWriter(logdir)
 
     main()

@@ -5,18 +5,18 @@ from wide_resnet import WideResNet
 
 
 class SparseAutoencoder_all(nn.Module):
-    def __init__(self, in_channel, num_classes, feature_dim, latent_dim):
+    def __init__(self, in_channel, num_classes, feature_dim, latent_dim, depth):
         super(SparseAutoencoder_all, self).__init__()
 
         # cls = torchvision.models.resnet18(pretrained=True)
         # cls.conv1 = nn.Conv2d(in_channels=in_channel, out_channels=64, kernel_size=3, stride=1, padding=3)
         # self.cls = nn.Sequential(*list(cls.children())[:-1])
         
-        self.cls = WideResNet(depth=28, in_channel=in_channel, num_classes=num_classes, feature_dim=feature_dim, widen_factor=10)
+        self.cls = WideResNet(depth=depth, in_channel=in_channel,num_classes=num_classes, feature_dim=feature_dim, widen_factor=10)
 
         self.fc1 = nn.ModuleList([nn.Linear(feature_dim, latent_dim) for _ in range(num_classes)])
         self.fc2 = nn.ModuleList([nn.Linear(latent_dim, feature_dim) for _ in range(num_classes)])
-
+        
     def forward(self, x):
         """
             feat:(B,C)
