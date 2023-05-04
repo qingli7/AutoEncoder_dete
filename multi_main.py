@@ -254,3 +254,6 @@ if __name__ == '__main__':
     writer = SummaryWriter(logdir)
 
     main()
+    
+# using following script to train the model
+# python -m torch.distributed.launch --nproc_per_node=3 main.py
