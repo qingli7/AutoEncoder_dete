@@ -256,4 +256,4 @@ if __name__ == '__main__':
     main()
     
 # using following script to train the model
-# python -m torch.distributed.launch --nproc_per_node=3 main.py
+# python -m torch.distributed.launch --nproc_per_node=3 multi_main.py
